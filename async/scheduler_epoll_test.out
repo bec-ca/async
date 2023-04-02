@@ -1,0 +1,14 @@
+================================================================================
+Test: basic
+Incoming server connection
+data sent to client
+Incoming data from server: hello there
+Incoming data from client: hello server, this is client
+got eof
+
+================================================================================
+Test: large_data
+Incoming server connection
+got eof
+bytes received: 12000000  recv_count>2: true
+

@@ -1,0 +1,29 @@
+================================================================================
+Test: basic
+Ok(yo!)
+
+================================================================================
+Test: map
+resolved value: got 'hello'
+
+================================================================================
+Test: bind
+Before resolving anything
+Before resolving def1
+resolved value: outer:'hello' inner:'inner string'
+After resolving def_inner
+
+================================================================================
+Test: bind2
+Before resolving anything
+Before resolving def_inner
+resolved value: outer:'hello' inner:'inner string'
+After resolving def1
+
+================================================================================
+Test: bind3
+resolved value: outer:'hello' inner:'inner string'
+
+================================================================================
+Test: compile_error
+

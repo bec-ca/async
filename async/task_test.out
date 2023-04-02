@@ -1,0 +1,8 @@
+================================================================================
+Test: coro_basic
+simple_task
+get_string
+get_other_string
+get_slow_string
+this is the string -- this is the other string
+

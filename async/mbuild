@@ -1,0 +1,345 @@
+cpp_library:
+  name: async
+  sources: async.cpp
+  headers: async.hpp
+  libs:
+    /bee/util
+    scheduler_context
+
+cpp_library:
+  name: async_command
+  sources: async_command.cpp
+  headers: async_command.hpp
+  libs:
+    /command/command_builder
+    async
+    scheduler_selector
+    task
+
+cpp_library:
+  name: async_fd
+  sources: async_fd.cpp
+  headers: async_fd.hpp
+  libs:
+    /bee/data_buffer
+    /bee/error
+    /bee/file_descriptor
+    async
+    deferred_awaitable
+    ivar_multi
+    task
+
+cpp_library:
+  name: async_process
+  sources: async_process.cpp
+  headers: async_process.hpp
+  libs:
+    /bee/error
+    /bee/os
+    /bee/sub_process
+    process_manager
+    process_manager_gen
+    process_manager_unix
+    scheduler_context
+
+cpp_test:
+  name: async_process_test
+  sources: async_process_test.cpp
+  libs:
+    /bee/format_optional
+    async_process
+    deferred_awaitable
+    scheduler_selector
+    testing
+  output: async_process_test.out
+
+cpp_test:
+  name: async_test
+  sources: async_test.cpp
+  libs:
+    /bee/format
+    /bee/testing
+    async
+    deferred_awaitable
+    scheduler_selector
+    task
+    testing
+  output: async_test.out
+
+cpp_library:
+  name: close_once
+  sources: close_once.cpp
+  headers: close_once.hpp
+  libs:
+    once
+    task
+
+cpp_library:
+  name: closeable
+  sources: closeable.cpp
+  headers: closeable.hpp
+  libs: task
+
+cpp_library:
+  name: closed
+  sources: closed.cpp
+  headers: closed.hpp
+  libs:
+    /bee/error
+    closeable
+    deferred_awaitable
+    ivar_multi
+
+cpp_library:
+  name: deferred_awaitable
+  headers: deferred_awaitable.hpp
+  libs:
+    /bee/copy
+    async
+
+cpp_library:
+  name: every
+  headers: every.hpp
+  libs:
+    /bee/span
+    deferred_awaitable
+    task
+
+cpp_library:
+  name: host_and_port
+  sources: host_and_port.cpp
+  headers: host_and_port.hpp
+  libs:
+    /bee/error
+    /bee/string_util
+    /yasf/of_stringable_mixin
+
+cpp_library:
+  name: ivar_multi
+  headers: ivar_multi.hpp
+  libs:
+    /bee/copy
+    async
+
+cpp_library:
+  name: once
+  headers: once.hpp
+  libs:
+    deferred_awaitable
+    ivar_multi
+    task
+
+cpp_test:
+  name: once_test
+  sources: once_test.cpp
+  libs:
+    once
+    testing
+  output: once_test.out
+
+cpp_library:
+  name: out_thread
+  headers: out_thread.hpp
+  libs:
+    /bee/queue
+    once
+    pipe
+    queue_bridge
+
+cpp_test:
+  name: out_thread_test
+  sources: out_thread_test.cpp
+  libs:
+    /bee/format_optional
+    out_thread
+    testing
+  output: out_thread_test.out
+
+cpp_library:
+  name: pipe
+  headers: pipe.hpp
+  libs:
+    /bee/format
+    async
+    deferred_awaitable
+    task
+
+cpp_test:
+  name: pipe_test
+  sources: pipe_test.cpp
+  libs:
+    pipe
+    testing
+  output: pipe_test.out
+
+cpp_library:
+  name: process_manager
+  sources: process_manager.cpp
+  headers: process_manager.hpp
+  libs: /bee/sub_process
+
+cpp_library:
+  name: process_manager_gen
+  sources: process_manager_gen.cpp
+  headers: process_manager_gen.hpp
+  libs:
+    /bee/sub_process
+    out_thread
+    process_manager
+
+cpp_library:
+  name: process_manager_unix
+  sources: process_manager_unix.cpp
+  headers: process_manager_unix.hpp
+  libs:
+    /bee/signal
+    /bee/sub_process
+    process_manager
+    scheduler_context
+
+cpp_library:
+  name: queue_bridge
+  headers: queue_bridge.hpp
+  libs:
+    /bee/file_descriptor
+    async
+    pipe
+
+cpp_library:
+  name: run_scheduler
+  sources: run_scheduler.cpp
+  headers: run_scheduler.hpp
+  libs:
+    deferred_awaitable
+    scheduler_selector
+    task
+
+cpp_library:
+  name: scheduler
+  sources: scheduler.cpp
+  headers: scheduler.hpp
+  libs:
+    /bee/error
+    /bee/file_descriptor
+    /bee/span
+
+cpp_library:
+  name: scheduler_context
+  sources: scheduler_context.cpp
+  headers: scheduler_context.hpp
+  libs: scheduler
+
+cpp_library:
+  name: scheduler_epoll
+  sources: scheduler_epoll.cpp
+  headers: scheduler_epoll.hpp
+  libs:
+    /bee/file_descriptor
+    /bee/time
+    async
+    scheduler
+    scheduler_context
+
+cpp_test:
+  name: scheduler_epoll_test
+  sources: scheduler_epoll_test.cpp
+  libs:
+    /bee/testing
+    scheduler_epoll
+    scheduler_test_common
+  output: scheduler_epoll_test.out
+  os_filter: linux
+
+cpp_library:
+  name: scheduler_poll
+  sources: scheduler_poll.cpp
+  headers: scheduler_poll.hpp
+  libs:
+    /bee/file_descriptor
+    /bee/span
+    /bee/time
+    async
+    scheduler
+    scheduler_context
+    socket
+
+cpp_test:
+  name: scheduler_poll_test
+  sources: scheduler_poll_test.cpp
+  libs:
+    /bee/testing
+    scheduler_poll
+    scheduler_test_common
+  output: scheduler_poll_test.out
+
+cpp_library:
+  name: scheduler_selector
+  sources: scheduler_selector.cpp
+  headers: scheduler_selector.hpp
+  libs:
+    /bee/error
+    /bee/os
+    /bee/signal
+    scheduler_context
+    scheduler_epoll
+    scheduler_poll
+
+cpp_library:
+  name: scheduler_test_common
+  sources: scheduler_test_common.cpp
+  headers: scheduler_test_common.hpp
+  libs:
+    /bee/data_buffer
+    deferred_awaitable
+    run_scheduler
+    scheduler_context
+    socket
+
+cpp_library:
+  name: socket
+  sources: socket.cpp
+  headers: socket.hpp
+  libs:
+    /bee/data_buffer
+    /bee/error
+    /bee/file_descriptor
+    /bee/util
+    async_fd
+    task
+
+cpp_test:
+  name: socket_test
+  sources: socket_test.cpp
+  libs:
+    /bee/util
+    deferred_awaitable
+    socket
+    testing
+  output: socket_test.out
+
+cpp_library:
+  name: task
+  headers: task.hpp
+  libs:
+    async
+    deferred_awaitable
+
+cpp_test:
+  name: task_test
+  sources: task_test.cpp
+  libs:
+    deferred_awaitable
+    task
+    testing
+  output: task_test.out
+
+cpp_library:
+  name: testing
+  sources: testing.cpp
+  headers: testing.hpp
+  libs:
+    /bee/testing
+    async
+    run_scheduler
+    task
+
