@@ -1,8 +1,12 @@
 ================================================================================
-Test: coro_basic
+Test: task_basic
 simple_task
 get_string
 get_other_string
 get_slow_string
-this is the string -- this is the other string
+this is the string -- this is the other string -- this is the the *slooooow* string
+
+================================================================================
+Test: void_task
+done
 

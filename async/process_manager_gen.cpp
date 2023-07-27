@@ -1,9 +1,11 @@
 #include "process_manager_gen.hpp"
 
+#include <queue>
+
+#include "out_thread.hpp"
+
 #include "async/process_manager.hpp"
 #include "bee/sub_process.hpp"
-#include "out_thread.hpp"
-#include <queue>
 
 using bee::SubProcess;
 using std::make_shared;
@@ -28,11 +30,10 @@ struct WorkInput {
 struct WorkOutput {
   using ptr = unique_ptr<WorkOutput>;
   ProcessManager::on_exit_callback exit_callback;
-  bee::OrError<bee::Unit> result;
+  bee::OrError<> result;
 
   WorkOutput(
-    ProcessManager::on_exit_callback&& exit_callback,
-    bee::OrError<bee::Unit>&& result)
+    ProcessManager::on_exit_callback&& exit_callback, bee::OrError<>&& result)
       : exit_callback(std::move(exit_callback)), result(std::move(result))
   {}
 };
@@ -43,7 +44,7 @@ struct ProcessManagerGenImpl : public ProcessManager {
  public:
   ProcessManagerGenImpl(OT::ptr&& out_threads)
       : _out_threads(std::move(out_threads)),
-        _handler(_out_threads->output_pipe()->iter_values(_handle_output))
+        _handler(_out_threads->output_pipe()->iter(_handle_output))
   {}
 
   virtual ~ProcessManagerGenImpl() {}
@@ -72,7 +73,7 @@ struct ProcessManagerGenImpl : public ProcessManager {
     for (auto& work : queue_pair.input_queue) {
       auto res = work->proc->wait();
       queue_pair.output_queue.push(make_unique<WorkOutput>(
-        std::move(work->exit_callback), std::move(res)));
+        std::move(work->exit_callback), std::move(res).ignore_value()));
     }
   }
 
@@ -86,7 +87,7 @@ struct ProcessManagerGenImpl : public ProcessManager {
   }
 
   OT::ptr _out_threads;
-  Task<bee::Unit> _handler;
+  Task<> _handler;
 };
 
 } // namespace

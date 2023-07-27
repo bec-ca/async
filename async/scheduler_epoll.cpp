@@ -1,18 +1,20 @@
 #include "scheduler_epoll.hpp"
-#include "bee/file_descriptor.hpp"
+
+#include "bee/fd.hpp"
 
 #ifndef __APPLE__
+
+#include <cstring>
+#include <map>
+
+#include <sys/epoll.h>
 
 #include "async.hpp"
 #include "scheduler.hpp"
 
 #include "bee/time.hpp"
 
-#include <cstring>
-#include <map>
-#include <sys/epoll.h>
-
-using bee::FileDescriptor;
+using bee::FD;
 using bee::Span;
 using bee::Time;
 using std::function;
@@ -36,15 +38,15 @@ struct SchedulerEpollImpl : public Scheduler {
   using ptr = std::unique_ptr<SchedulerEpollImpl>;
 
   // methods
-  SchedulerEpollImpl(FileDescriptor&& fd) : _epoll_fd(std::move(fd)) {}
+  SchedulerEpollImpl(FD&& fd) : _epoll_fd(std::move(fd)) {}
 
   virtual ~SchedulerEpollImpl() {}
 
   SchedulerEpollImpl(const SchedulerEpollImpl&) = delete;
   SchedulerEpollImpl(SchedulerEpollImpl&&) = default;
 
-  virtual bee::OrError<bee::Unit> add_fd(
-    const FileDescriptor::shared_ptr& fd, function<void()>&& callback)
+  virtual bee::OrError<> add_fd(
+    const FD::shared_ptr& fd, function<void()>&& callback)
   {
     int fd_i = fd->int_fd();
     if (_fd_to_id.find(fd) != _fd_to_id.end()) {
@@ -58,21 +60,21 @@ struct SchedulerEpollImpl : public Scheduler {
 
     int ret = epoll_ctl(_epoll_fd.int_fd(), EPOLL_CTL_ADD, fd_i, &event);
     if (ret == -1) {
-      return bee::Error::format(
+      return bee::Error::fmt(
         "Failed to add socket to epoll: $", strerror(errno));
     }
 
     _callbacks.emplace(id, std::move(callback));
     _fd_to_id.emplace(fd, id);
 
-    return bee::unit;
+    return bee::ok();
   }
 
-  bee::OrError<bee::Unit> remove_fd(const FileDescriptor::shared_ptr& fd)
+  bee::OrError<> remove_fd(const FD::shared_ptr& fd)
   {
     auto it = _fd_to_id.find(fd);
     if (it == _fd_to_id.end()) {
-      return bee::Error::format("ID for fd not found");
+      return bee::Error::fmt("ID for fd not found");
     }
     auto id = it->second;
 
@@ -95,7 +97,7 @@ struct SchedulerEpollImpl : public Scheduler {
     _fd_to_id.clear();
   }
 
-  bee::OrError<bee::Unit> wait_until(const function<bool()>& stop)
+  bee::OrError<> wait_until(const function<bool()>& stop)
   {
     do {
       _move_time();
@@ -136,8 +138,7 @@ struct SchedulerEpollImpl : public Scheduler {
   }
 
  private:
-  bee::OrError<bee::Unit> _add_fd(
-    const FileDescriptor& fd, std::function<void()> callback);
+  bee::OrError<> _add_fd(const FD& fd, std::function<void()> callback);
 
   void _run_tasks_until_empty()
   {
@@ -162,7 +163,7 @@ struct SchedulerEpollImpl : public Scheduler {
     _run_tasks_until_empty();
   }
 
-  bee::OrError<bee::Unit> _wait_events(Span timeout)
+  bee::OrError<> _wait_events(Span timeout)
   {
     constexpr int max_events = 64;
     epoll_event events[max_events];
@@ -179,8 +180,7 @@ struct SchedulerEpollImpl : public Scheduler {
 
     if (ret == -1) {
       if (errno != EINTR) {
-        return bee::Error::format(
-          "Failed to wait to epoll: $", strerror(errno));
+        return bee::Error::fmt("Failed to wait to epoll: $", strerror(errno));
       }
     } else {
       for (int i = 0; i < ret; i++) {
@@ -197,11 +197,11 @@ struct SchedulerEpollImpl : public Scheduler {
   }
 
   // fields
-  FileDescriptor _epoll_fd;
+  FD _epoll_fd;
   using Id = uint32_t;
 
   std::unordered_map<Id, std::function<void()>> _callbacks;
-  std::unordered_map<FileDescriptor::shared_ptr, Id> _fd_to_id;
+  std::unordered_map<FD::shared_ptr, Id> _fd_to_id;
   Id _next_id = 0;
 
   struct TimedTask {
@@ -233,10 +233,10 @@ bee::OrError<Scheduler::ptr> SchedulerEpoll::create_direct()
   int fd = epoll_create1(EPOLL_CLOEXEC);
 
   if (fd == -1) {
-    return bee::Error::format("Failed to create epoll: $", strerror(errno));
+    return bee::Error::fmt("Failed to create epoll: $", strerror(errno));
   }
 
-  return std::make_unique<SchedulerEpollImpl>(FileDescriptor(fd));
+  return std::make_unique<SchedulerEpollImpl>(FD(fd));
 }
 
 bee::OrError<SchedulerContext> SchedulerEpoll::create_context()

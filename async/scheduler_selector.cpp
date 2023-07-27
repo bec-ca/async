@@ -1,9 +1,10 @@
 #include "scheduler_selector.hpp"
 
-#include "bee/os.hpp"
-#include "bee/signal.hpp"
 #include "scheduler_epoll.hpp"
 #include "scheduler_poll.hpp"
+
+#include "bee/os.hpp"
+#include "bee/signal.hpp"
 
 namespace async {
 

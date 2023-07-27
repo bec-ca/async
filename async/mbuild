@@ -13,7 +13,7 @@ cpp_library:
   libs:
     /command/command_builder
     async
-    scheduler_selector
+    run_scheduler
     task
 
 cpp_library:
@@ -23,11 +23,20 @@ cpp_library:
   libs:
     /bee/data_buffer
     /bee/error
-    /bee/file_descriptor
+    /bee/fd
     async
     deferred_awaitable
     ivar_multi
     task
+
+cpp_test:
+  name: async_fd_test
+  sources: async_fd_test.cpp
+  libs:
+    /bee/fd
+    async_fd
+    testing
+  output: async_fd_test.out
 
 cpp_library:
   name: async_process
@@ -112,6 +121,7 @@ cpp_library:
   libs:
     /bee/error
     /bee/string_util
+    /command/flag_spec
     /yasf/of_stringable_mixin
 
 cpp_library:
@@ -201,7 +211,6 @@ cpp_library:
   name: queue_bridge
   headers: queue_bridge.hpp
   libs:
-    /bee/file_descriptor
     async
     pipe
 
@@ -210,7 +219,6 @@ cpp_library:
   sources: run_scheduler.cpp
   headers: run_scheduler.hpp
   libs:
-    deferred_awaitable
     scheduler_selector
     task
 
@@ -220,7 +228,7 @@ cpp_library:
   headers: scheduler.hpp
   libs:
     /bee/error
-    /bee/file_descriptor
+    /bee/fd
     /bee/span
 
 cpp_library:
@@ -234,7 +242,7 @@ cpp_library:
   sources: scheduler_epoll.cpp
   headers: scheduler_epoll.hpp
   libs:
-    /bee/file_descriptor
+    /bee/fd
     /bee/time
     async
     scheduler
@@ -255,7 +263,7 @@ cpp_library:
   sources: scheduler_poll.cpp
   headers: scheduler_poll.hpp
   libs:
-    /bee/file_descriptor
+    /bee/fd
     /bee/span
     /bee/time
     async
@@ -302,7 +310,7 @@ cpp_library:
   libs:
     /bee/data_buffer
     /bee/error
-    /bee/file_descriptor
+    /bee/fd
     /bee/util
     async_fd
     task
@@ -341,5 +349,15 @@ cpp_library:
     /bee/testing
     async
     run_scheduler
+    task
+
+cpp_library:
+  name: thread_bridge
+  headers: thread_bridge.hpp
+  libs:
+    /bee/fd
+    /bee/queue
+    async_fd
+    pipe
     task
 

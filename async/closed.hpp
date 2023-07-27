@@ -9,16 +9,16 @@ struct Closed : public async::Closeable {
  public:
   Closed() noexcept;
   virtual ~Closed();
-  virtual Task<bee::Unit> close() override;
-  virtual Task<bee::OrError<bee::Unit>> closed();
+  virtual Task<> close() override;
+  virtual Task<bee::OrError<>> closed();
 
  protected:
-  virtual async::Task<bee::Unit> close_impl() = 0;
+  virtual async::Task<> close_impl() = 0;
 
  private:
   bool _close_requested;
 
-  IvarMulti<bee::OrError<bee::Unit>>::ptr _on_close_ivar;
+  IvarMulti<bee::OrError<>>::ptr _on_close_ivar;
 };
 
 } // namespace async

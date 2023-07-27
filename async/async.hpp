@@ -1,49 +1,123 @@
 #pragma once
 
-#include "bee/util.hpp"
-#include "scheduler_context.hpp"
-
 #include <cassert>
 #include <functional>
 #include <memory>
 #include <optional>
-#include <queue>
 #include <type_traits>
 #include <vector>
 
+#include "scheduler_context.hpp"
+
+#include "bee/unit.hpp"
+#include "bee/util.hpp"
+
 namespace async {
 
-template <std::move_constructible T> struct DeferredImpl;
-template <std::move_constructible T> struct Deferred;
+template <class T>
+concept deferable_value = std::is_void_v<T> || std::is_move_constructible_v<T>;
 
-template <std::move_constructible T>
+template <deferable_value T> struct DeferredImpl;
+template <deferable_value T> struct Deferred;
+
+namespace details {
+
+template <class F, class T> struct is_invocable;
+
+template <class F> struct is_invocable<F, void> {
+  constexpr static bool value = std::invocable<F>;
+};
+
+template <class F, class T> struct is_invocable {
+  constexpr static bool value = std::invocable<F, T>;
+};
+
+template <class F, class T>
+concept invocable = is_invocable<F, T>::value;
+
+template <class T, class... Args> struct is_constructible;
+
+template <> struct is_constructible<void> {
+  constexpr static bool value = true;
+};
+
+template <> struct is_constructible<void, void> {
+  constexpr static bool value = true;
+};
+
+template <class T, class... Args> struct is_constructible {
+  constexpr static bool value = std::is_constructible_v<T, Args...>;
+};
+
+template <class T, class... Args>
+concept constructible_from = is_constructible<T, Args...>::value;
+
+template <class F, class... Args> struct invoke_result;
+
+template <class F> struct invoke_result<F, void> {
+  using type = std::invoke_result_t<F>;
+};
+
+template <class F, class... Args> struct invoke_result {
+  using type = std::invoke_result_t<F, Args...>;
+};
+
+template <class F, class... Args>
+using invoke_result_t = typename invoke_result<F, Args...>::type;
+
+} // namespace details
+
+template <deferable_value T = void>
 struct Ivar : public std::enable_shared_from_this<Ivar<T>> {
+ private:
+  template <class U> struct make_listener_type;
+  template <> struct make_listener_type<void> {
+    using type = std::function<void()>;
+  };
+  template <class U> struct make_listener_type {
+    using type = std::function<void(U&&)>;
+  };
+
+  struct filled_t {};
+
  public:
   using ptr = std::shared_ptr<Ivar>;
-  using element_type = T;
+  using value_type = T;
+  using rvalue_type = std::add_rvalue_reference_t<value_type>;
+  using lvalue_type = std::add_lvalue_reference_t<value_type>;
+
+  using listener_t = typename make_listener_type<T>::type;
 
   Ivar() {}
-
   ~Ivar() {}
 
-  Ivar(const T& value) : _value(value) {}
+  template <class... Args>
+  Ivar(filled_t, Args&&... args) : _value(std::forward<Args>(args)...)
+  {
+    if constexpr (std::is_void_v<T>) {
+      // Make sure _value is not empty if T is void
+      _value.emplace();
+    }
+  }
 
   static ptr create() { return std::make_shared<Ivar<T>>(); }
 
-  template <std::convertible_to<T> U> static ptr create_with_value(U&& value)
+  template <class... Args>
+    requires details::constructible_from<T, Args...>
+  static ptr create_with_value(Args&&... args)
   {
-    Ivar<T>::ptr ivar = std::make_shared<Ivar<T>>();
-    ivar->resolve(std::forward<U>(value));
-    return ivar;
+    return std::make_shared<Ivar<T>>(filled_t{}, std::forward<Args>(args)...);
   }
 
-  template <std::convertible_to<T> P> void resolve(P&& value)
+  template <class... Args>
+    requires details::constructible_from<T, Args...>
+  void fill(Args&&... args)
   {
-    _set_value(std::forward<P>(value));
+    _set_value(std::forward<Args>(args)...);
     _maybe_schedule();
   }
 
-  template <std::invocable<T> F> void on_resolved(F&& callback)
+  template <details::invocable<T> F> void on_determined(F&& callback)
   {
     if (_listener) { assert(false && "Ivar already has a listener"); }
     _listener = std::forward<F>(callback);
@@ -52,16 +126,28 @@ struct Ivar : public std::enable_shared_from_this<Ivar<T>> {
 
   static Deferred<T> value(const ptr& ivar) { return Deferred<T>(ivar); }
 
-  bool is_resolved() { return _is_resolved; }
+  lvalue_type value() &
+  {
+    if (!_value.has_value()) { assert(false && "Ivar is not determined"); }
+    if constexpr (!std::is_void_v<T>) { return *_value; }
+  }
+
+  rvalue_type value() &&
+  {
+    if (!_value.has_value()) { assert(false && "Ivar is not determined"); }
+    if constexpr (!std::is_void_v<T>) { return std::move(*_value); }
+  }
+
+  bool is_determined() const { return _is_determined; }
 
  private:
-  template <std::convertible_to<T> P> void _set_value(P&& value)
+  template <class... Args> void _set_value(Args&&... args)
   {
     if (_dead || _value.has_value()) {
-      assert(false && "Ivar already resolved");
+      assert(false && "Ivar already determined");
     }
-    _value.emplace(std::forward<P>(value));
-    _is_resolved = true;
+    _value.emplace(std::forward<Args>(args)...);
+    _is_determined = true;
   }
 
   void _maybe_schedule()
@@ -74,18 +160,22 @@ struct Ivar : public std::enable_shared_from_this<Ivar<T>> {
 
   void _deliver()
   {
-    _listener(std::move(*_value));
+    if constexpr (std::is_void_v<T>) {
+      _listener();
+    } else {
+      _listener(std::move(*_value));
+    }
     _listener = nullptr;
-    _value = std::nullopt;
   }
 
-  std::function<void(T&& value)> _listener;
-  std::optional<T> _value;
+  listener_t _listener;
+  std::optional<bee::unit_if_void_t<T>> _value;
   bool _dead = false;
-  bool _is_resolved = false;
+  bool _is_determined = false;
 };
 
-template <class T> Deferred<T> ivar_value(const std::shared_ptr<Ivar<T>>& ivar)
+template <deferable_value T>
+Deferred<T> ivar_value(const std::shared_ptr<Ivar<T>>& ivar)
 {
   return Ivar<T>::value(ivar);
 }
@@ -110,42 +200,49 @@ static const typename DeferredImpl<R>::ptr& get_def_impl(
 // is_deferred
 //
 
-template <std::move_constructible T> struct Deferred;
+template <class T> struct is_deferred;
 
-template <class T> struct is_deferred_t;
-
-template <class T> struct is_deferred_t<Deferred<T>> {
+template <class T> struct is_deferred<Deferred<T>> {
   static constexpr bool value = true;
 };
 
-template <class T> struct is_deferred_t {
+template <class T> struct is_deferred {
   static constexpr bool value = false;
 };
 
+template <class T> constexpr bool is_deferred_v = is_deferred<T>::value;
+
 template <class T>
-concept deferred = is_deferred_t<T>::value;
+concept deferred = is_deferred_v<T>;
 
 template <class F, class T>
 concept deferred_bind_fn = requires(F f, T t) {
-                             {
-                               f(t)
-                               } -> deferred;
-                           };
+  {
+    f(t)
+  } -> deferred;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 // DeferredImpl
 //
 
-template <std::move_constructible T> struct DeferredImpl {
+template <deferable_value T = void> struct DeferredImpl {
  public:
   using ptr = std::shared_ptr<DeferredImpl>;
-  using element_type = T;
+
+  using value_type = T;
+  using lvalue_type = std::add_lvalue_reference_t<value_type>;
+  using rvalue_type = std::add_rvalue_reference_t<value_type>;
+
+  using const_value_type = const T;
+  using const_lvalue_type = std::add_lvalue_reference_t<const_value_type>;
 
   DeferredImpl(const std::shared_ptr<Ivar<T>>& ivar) : _ivar(ivar) {}
   DeferredImpl(std::shared_ptr<Ivar<T>>&& ivar) : _ivar(std::move(ivar)) {}
 
-  explicit DeferredImpl(const T& value)
-      : _ivar(Ivar<T>::create_with_value(value))
+  template <std::convertible_to<T> U>
+  explicit DeferredImpl(U&& value)
+      : _ivar(Ivar<T>::create_with_value(std::forward<U>(value)))
   {}
 
   static ptr create(const typename Ivar<T>::ptr& ivar)
@@ -158,38 +255,42 @@ template <std::move_constructible T> struct DeferredImpl {
     return std::make_shared<DeferredImpl<T>>(std::move(ivar));
   }
 
-  bool is_resolved() const { return _ivar->is_resolved(); }
+  bool is_determined() const { return _ivar->is_determined(); }
 
-  template <class U> static ptr create_with_value(U&& v)
+  template <class... Args>
+    requires details::constructible_from<T, Args...>
+  static ptr create_with_value(Args&&... args)
   {
-    std::shared_ptr<Ivar<T>> ivar = Ivar<T>::create_with_value(v);
+    std::shared_ptr<Ivar<T>> ivar =
+      Ivar<T>::create_with_value(std::forward<Args>(args)...);
     return std::make_shared<DeferredImpl<T>>(std::move(ivar));
   }
 
-  template <std::invocable<T> F> auto map(F&& callback)
+  template <details::invocable<T> F> auto map(F&& callback)
   {
-    using P = std::invoke_result_t<F, T>;
+    using P = details::invoke_result_t<F, T>;
     auto out = Ivar<P>::create();
 
-    _ivar->on_resolved(
-      [callback = std::move(callback), out, ivar = _ivar](T&& value) {
-        out->resolve(callback(std::move(value)));
-      });
+    _ivar->on_determined(
+      [callback = std::move(callback), out, ivar = _ivar]<class... Args>(
+        Args&&... args) { out->fill(callback(std::forward<Args>(args)...)); });
 
     return ivar_value(out);
   }
 
-  template <std::invocable<T> F> auto bind(F&& callback)
+  template <details::invocable<T> F> auto bind(F&& callback)
   {
-    using return_type = typename std::invoke_result_t<F, T>;
-    using P = typename return_type::element_type;
+    using return_type = typename details::invoke_result_t<F, T>;
+    using P = typename return_type::value_type;
     auto ivar = Ivar<P>::create();
 
-    iter([callback = std::forward<F>(callback), ivar](T&& value) mutable {
-      auto b = callback(std::move(value));
+    iter([callback = std::forward<F>(callback),
+          ivar]<class... Args>(Args&&... args) mutable {
+      auto b = callback(std::forward<Args>(args)...);
 
-      get_def_impl(b)->iter(
-        [ivar](P&& value) { ivar->resolve(std::move(value)); });
+      get_def_impl(b)->iter([ivar]<class... Args2>(Args2&&... args) {
+        ivar->fill(std::forward<Args2>(args)...);
+      });
     });
 
     return ivar_value(ivar);
@@ -197,11 +298,12 @@ template <std::move_constructible T> struct DeferredImpl {
 
   template <class F> void iter(F&& callback)
   {
-    _ivar->on_resolved(std::forward<F>(callback));
+    _ivar->on_determined(std::forward<F>(callback));
   }
 
-  T& value() { return _ivar->value(); }
-  const T& value() const { return _ivar->value(); }
+  lvalue_type value() & { return _ivar->value(); }
+  rvalue_type value() && { return std::move(*_ivar).value(); }
+  const_lvalue_type value() const& { return _ivar->value(); }
 
   static ptr never()
   {
@@ -225,9 +327,14 @@ constexpr never_t never;
 // Deferred
 //
 
-template <std::move_constructible T> struct Deferred {
+template <deferable_value T = void> struct Deferred {
  public:
-  using element_type = T;
+  using value_type = T;
+  using lvalue_type = std::add_lvalue_reference_t<value_type>;
+  using rvalue_type = std::add_rvalue_reference_t<value_type>;
+
+  using const_value_type = const T;
+  using const_lvalue_type = std::add_lvalue_reference_t<const_value_type>;
   static constexpr bool is_impl = false;
 
   Deferred(const std::shared_ptr<Ivar<T>>& v) : _d(DeferredImpl<T>::create(v))
@@ -242,61 +349,57 @@ template <std::move_constructible T> struct Deferred {
   Deferred(const never_t&) : _d(DeferredImpl<T>::never()) {}
 
   template <class U>
-    requires std::constructible_from<T, U>
+    requires details::constructible_from<T, U>
   Deferred(const Deferred<U>& v)
       : Deferred(v.map([](U&& v) -> T { return std::move(v); }))
   {}
 
   template <class U>
-    requires std::constructible_from<T, U>
+    requires details::constructible_from<T, U>
   Deferred(Deferred<U>&& v)
       : Deferred(v.map([](U&& v) -> T { return std::move(v); }))
   {}
 
   template <class U>
-    requires std::constructible_from<T, U>
+    requires details::constructible_from<T, U>
   Deferred(const std::shared_ptr<Ivar<U>>& v) : Deferred(ivar_value(v))
   {}
 
   template <class U>
-    requires std::constructible_from<T, U>
+    requires details::constructible_from<T, U>
   Deferred(std::shared_ptr<Ivar<U>>&& v) : Deferred(ivar_value(v))
   {}
 
-  template <class U>
-    requires std::constructible_from<T, U>
-  Deferred(U&& v) : _d(DeferredImpl<T>::create_with_value(std::forward<U>(v)))
+  template <class... Args>
+    requires details::constructible_from<T, Args...>
+  Deferred(Args&&... args)
+      : _d(DeferredImpl<T>::create_with_value(std::forward<Args>(args)...))
   {}
 
-  template <class F> auto map(F&& callback) const
+  lvalue_type value() & { return _d->value(); }
+  rvalue_type value() && { return std::move(*_d).value(); }
+  const_lvalue_type value() const& { return _d->value(); }
+
+  template <details::invocable<T> F> auto map(F&& callback) const
   {
-    static_assert(
-      std::invocable<F, T>,
-      "map function doesn't accept Deferred inner value type");
-    using P = std::invoke_result_t<F, T>;
+    using P = details::invoke_result_t<F, T>;
     static_assert(!deferred<P>, "map function must not return a deferred");
     return _d->map(std::forward<F>(callback));
   }
 
-  template <class F> auto bind(F&& callback) const
+  template <details::invocable<T> F> auto bind(F&& callback) const
   {
-    static_assert(
-      std::invocable<F, T>,
-      "bind function doesn't accept Deferred inner value type");
-    using P = std::invoke_result_t<F, T>;
+    using P = details::invoke_result_t<F, T>;
     static_assert(deferred<P>, "bind function must return a deferred");
     return _d->bind(std::forward<F>(callback));
   }
 
-  template <class F> void iter(F&& callback) const
+  template <details::invocable<T> F> void iter(F&& callback) const
   {
-    static_assert(
-      std::invocable<F, T>,
-      "iter function doesn't accept Deferred inner value type");
     _d->iter(std::forward<F>(callback));
   }
 
-  bool is_resolved() const { return _d->is_resolved(); }
+  bool is_determined() const { return _d->is_determined(); }
 
   const typename DeferredImpl<T>::ptr& impl() const { return _d; }
 
@@ -310,50 +413,6 @@ template <std::move_constructible T> struct Deferred {
 
 namespace __internal {
 
-template <class T>
-struct RepeatRunner : public std::enable_shared_from_this<RepeatRunner<T>> {
- public:
-  template <class F>
-  RepeatRunner(int times, F&& f)
-      : _counter(times), _callback(std::forward<F>(f))
-  {}
-
-  void start_worker() { _workers.push(run_worker()); }
-
-  Deferred<std::vector<T>> wait()
-  {
-    auto ptr = this->shared_from_this();
-    return _wait_all().map(
-      [ptr](const bee::Unit&) { return std::move(ptr->_results); });
-  }
-
- private:
-  Deferred<bee::Unit> run_worker()
-  {
-    if (_counter == 0) return bee::unit;
-    _counter--;
-    auto ptr = this->shared_from_this();
-    return _callback().bind([ptr](T&& result) {
-      ptr->_results.push_back(std::move(result));
-      return ptr->run_worker();
-    });
-  };
-
-  Deferred<bee::Unit> _wait_all()
-  {
-    if (_workers.empty()) { return bee::unit; }
-    auto d = _workers.front();
-    _workers.pop();
-    auto ptr = this->shared_from_this();
-    return d.bind([ptr](const bee::Unit&) { return ptr->_wait_all(); });
-  }
-
-  int _counter;
-  std::vector<T> _results;
-  std::queue<Deferred<bee::Unit>> _workers;
-  std::function<Deferred<T>()> _callback;
-};
-
 template <class T, class F>
 struct IterVectorState
     : public std::enable_shared_from_this<IterVectorState<T, F>> {
@@ -362,9 +421,9 @@ struct IterVectorState
       : _v(std::move(v)), _f(std::move(f)), _it(_v.begin())
   {}
 
-  Deferred<bee::Unit> next()
+  Deferred<> next()
   {
-    if (_it == _v.end()) { return bee::unit; }
+    if (_it == _v.end()) { return {}; }
     return _f(*(_it++)).bind(
       [ptr = this->shared_from_this()]() { ptr->next(); });
   }
@@ -397,21 +456,6 @@ struct WaitAllState : public std::enable_shared_from_this<WaitAllState<T>> {
 
   std::vector<T> _result;
 };
-
-template <
-  class F,
-  class T = typename std::invoke_result_t<F>::element_type::value_type>
-inline void repeat_until_impl(typename Ivar<T>::ptr&& ivar, F&& f)
-{
-  f().iter([f = std::move(f),
-            ivar = std::move(ivar)](std::optional<T>&& result) mutable {
-    if (result.has_value()) {
-      ivar->resolve(std::move(*result));
-    } else {
-      return repeat_until_impl(std::move(ivar), std::move(f));
-    }
-  });
-}
 
 template <class T> T copy(const T& value) { return value; }
 
@@ -447,36 +491,16 @@ void iter(const Deferred<T>& d1, const Deferred<U>& d2, F&& callback)
     });
 }
 
-template <class T, std::invocable<T> F>
-Deferred<bee::Unit> iter_vector(std::vector<T>&& v, F&& callback)
+template <class T, details::invocable<T> F>
+Deferred<> iter_vector(std::vector<T>&& v, F&& callback)
 {
   auto state = make_shared<T, F>(std::move(v), std::move(callback));
   return state->next();
 }
 
-Deferred<bee::OrError<bee::Unit>> repeat(
-  int times, const std::function<Deferred<bee::OrError<bee::Unit>>()>& f);
+Deferred<bee::OrError<>> repeat(
+  int times, const std::function<Deferred<bee::OrError<>>()>& f);
 
-template <class F, class T = typename std::invoke_result_t<F>::element_type>
-inline Deferred<std::vector<T>> repeat_parallel(
-  int times, int concurrency, F&& f)
-{
-  auto runner =
-    std::make_shared<__internal::RepeatRunner<T>>(times, std::forward<F>(f));
-  for (int i = 0; i < concurrency; i++) { runner->start_worker(); }
-  return runner->wait();
-}
-
-template <
-  class F,
-  class T = typename std::invoke_result_t<F>::element_type::value_type>
-inline Deferred<T> repeat_until(F&& f)
-{
-  auto ivar = Ivar<T>::create();
-  __internal::repeat_until_impl(__internal::copy(ivar), std::move(f));
-  return ivar_value(ivar);
-}
-
-Deferred<bee::Unit> after(const bee::Span& span);
+Deferred<> after(const bee::Span& span);
 
 } // namespace async

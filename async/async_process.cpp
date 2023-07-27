@@ -1,12 +1,12 @@
 #include "async_process.hpp"
 
-#include "bee/sub_process.hpp"
 #include "process_manager.hpp"
 #include "process_manager_gen.hpp"
 #include "process_manager_unix.hpp"
 #include "scheduler_context.hpp"
 
 #include "bee/os.hpp"
+#include "bee/sub_process.hpp"
 
 using bee::SubProcess;
 

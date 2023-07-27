@@ -3,7 +3,7 @@
 #include "async.hpp"
 #include "deferred_awaitable.hpp"
 
-using bee::FileDescriptor;
+using bee::FD;
 using std::nullopt;
 using std::optional;
 using std::string;
@@ -11,18 +11,18 @@ using std::weak_ptr;
 
 namespace async {
 
-AsyncFD::AsyncFD(FileDescriptor::shared_ptr&& fd, bool is_socket)
-    : _fd(std::move(fd)), _is_socket(is_socket)
+AsyncFD::AsyncFD(const FD::shared_ptr& fd, bool is_socket)
+    : _fd(fd), _is_socket(is_socket)
 {}
 
 AsyncFD::~AsyncFD() { close(); }
 
 bee::OrError<AsyncFD::ptr> AsyncFD::of_fd(
-  FileDescriptor::shared_ptr&& fd, bool is_socket)
+  const FD::shared_ptr& fd, bool is_socket)
 {
   bail_unit(fd->set_blocking(false));
 
-  auto sock = ptr(new AsyncFD(bee::copy(fd), is_socket));
+  auto sock = ptr(new AsyncFD(fd, is_socket));
 
   bail_unit(add_fd(fd, [weak = weak_ptr(sock)] {
     if (auto ptr = weak.lock()) { ptr->_handle_ready(); }
@@ -39,6 +39,7 @@ void AsyncFD::_handle_ready()
   must_unit(_maybe_write());
 
   if (_ready_callback != nullptr) { _ready_callback(); }
+  if (_wait_ready != nullptr) { _wait_ready->fill(); }
 }
 
 void AsyncFD::set_ready_callback(ready_callback&& ready_callback)
@@ -46,19 +47,19 @@ void AsyncFD::set_ready_callback(ready_callback&& ready_callback)
   _ready_callback = ready_callback;
 }
 
-bee::OrError<bee::Unit> AsyncFD::write(const string& data)
+bee::OrError<> AsyncFD::write(const string& data)
 {
   _outgoing.write(data);
   return _maybe_write();
 }
 
-bee::OrError<bee::Unit> AsyncFD::write(string&& data)
+bee::OrError<> AsyncFD::write(string&& data)
 {
   _outgoing.write(std::move(data));
   return _maybe_write();
 }
 
-bee::OrError<bee::Unit> AsyncFD::write(bee::DataBuffer&& data)
+bee::OrError<> AsyncFD::write(bee::DataBuffer&& data)
 {
   _outgoing.write(std::move(data));
   return _maybe_write();
@@ -69,7 +70,7 @@ bee::OrError<bee::ReadResult> AsyncFD::read(bee::DataBuffer& buf)
   return _read(buf);
 }
 
-bee::OrError<bee::Unit> AsyncFD::_maybe_write()
+bee::OrError<> AsyncFD::_maybe_write()
 {
   size_t bytes_sent = 0;
   for (auto& block : _outgoing) {
@@ -88,15 +89,15 @@ bee::OrError<bee::Unit> AsyncFD::_maybe_write()
   }
   _outgoing.consume(bytes_sent);
   if (_outgoing.empty() && _flushed_ivar != nullptr) {
-    _flushed_ivar->resolve(bee::ok());
+    _flushed_ivar->fill(bee::ok());
     _flushed_ivar = nullptr;
   }
-  return bee::unit;
+  return bee::ok();
 }
 
 bee::OrError<size_t> AsyncFD::_write(const std::byte* data, size_t size)
 {
-  if (_fd == nullptr) { shot("FileDescriptor already closed"); }
+  if (_fd == nullptr) { shot("FD already closed"); }
   if (_is_socket) {
     return _fd->send(data, size);
   } else {
@@ -104,9 +105,24 @@ bee::OrError<size_t> AsyncFD::_write(const std::byte* data, size_t size)
   }
 }
 
+Task<bee::OrError<bee::ReadResult>> AsyncFD::read_async(bee::DataBuffer& buf)
+{
+  if (_fd == nullptr) { co_return bee::Error("FD already closed"); }
+  if (_wait_ready != nullptr) {
+    co_return bee::Error("Cannot have two concurrent reads");
+  }
+  while (true) {
+    co_bail(result, _read(buf));
+    if (result.bytes_read() > 0 || result.is_eof()) { co_return result; }
+    _wait_ready = Ivar<>::create();
+    co_await _wait_ready;
+    _wait_ready = nullptr;
+  }
+}
+
 bee::OrError<bee::ReadResult> AsyncFD::_read(bee::DataBuffer& buf)
 {
-  if (_fd == nullptr) { shot("FileDescriptor already closed"); }
+  if (_fd == nullptr) { shot("FD already closed"); }
   if (_is_socket) {
     return _fd->recv_all_available(buf);
   } else {
@@ -121,11 +137,11 @@ bool AsyncFD::close()
   auto ret = _fd->close();
   _fd = nullptr;
   if (_flushed_ivar != nullptr) {
-    _flushed_ivar->resolve(bee::ok());
+    _flushed_ivar->fill(bee::ok());
     _flushed_ivar = nullptr;
   }
-  if (_closed_ivar != nullptr && !_closed_ivar->is_resolved()) {
-    _closed_ivar->resolve(bee::unit);
+  if (_closed_ivar != nullptr && !_closed_ivar->is_determined()) {
+    _closed_ivar->fill(bee::unit);
   }
   return ret;
 }
@@ -141,22 +157,20 @@ bee::OrError<optional<AsyncFD::ptr>> AsyncFD::accept()
   return of_fd(std::move(*fd).to_shared(), true);
 }
 
-Deferred<bee::OrError<bee::Unit>> AsyncFD::flushed()
+Task<bee::OrError<>> AsyncFD::flushed()
 {
-  if (_outgoing.empty()) { return bee::ok(); }
+  if (_outgoing.empty()) { co_return bee::ok(); }
   if (_flushed_ivar == nullptr) {
-    _flushed_ivar = IvarMulti<bee::OrError<bee::Unit>>::create();
+    _flushed_ivar = IvarMulti<bee::OrError<>>::create();
   }
-  return _flushed_ivar->deferred_value();
+  co_return co_await _flushed_ivar->deferred_value();
 }
 
-Task<bee::Unit> AsyncFD::closed()
+Task<> AsyncFD::closed()
 {
-  if (is_closed()) { co_return bee::unit; }
-  if (_closed_ivar == nullptr) {
-    _closed_ivar = IvarMulti<bee::Unit>::create();
-  }
-  co_return co_await _closed_ivar->deferred_value();
+  if (is_closed()) { co_return; }
+  if (_closed_ivar == nullptr) { _closed_ivar = IvarMulti<>::create(); }
+  co_await _closed_ivar->deferred_value();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

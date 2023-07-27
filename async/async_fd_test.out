@@ -1,0 +1,8 @@
+================================================================================
+Test: read_async
+Going to write
+Waiting to flush
+Going to read
+Read: hello
+Got EOF
+

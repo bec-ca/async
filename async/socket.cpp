@@ -1,17 +1,18 @@
 #include "socket.hpp"
 
-#include <arpa/inet.h>
 #include <cerrno>
+
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include "bee/file_descriptor.hpp"
+#include "bee/fd.hpp"
 #include "bee/util.hpp"
 
-using bee::FileDescriptor;
+using bee::FD;
 using std::decay_t;
 using std::is_same_v;
 using std::nullopt;
@@ -31,11 +32,11 @@ namespace async {
 
 namespace {
 
-bee::OrError<FileDescriptor::shared_ptr> create_socket_fd(int family)
+bee::OrError<FD::shared_ptr> create_socket_fd(int family)
 {
   int fd = socket(family, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (fd == -1) { shot("Failed to create socket: $", strerror(errno)); }
-  return FileDescriptor(fd).to_shared();
+  return FD(fd).to_shared();
 }
 
 } // namespace
@@ -199,12 +200,12 @@ bee::OrError<SocketClient::ptr> SocketClient::connect(const IP& ip, int port)
   return of_fd(std::move(afd));
 }
 
-bee::OrError<bee::Unit> SocketClient::send(bee::DataBuffer&& data)
+bee::OrError<> SocketClient::send(bee::DataBuffer&& data)
 {
   return _fd->write(std::move(data));
 }
 
-bee::OrError<bee::Unit> SocketClient::send(string&& data)
+bee::OrError<> SocketClient::send(string&& data)
 {
   return _fd->write(std::move(data));
 }
@@ -265,10 +266,10 @@ bool SocketClient::close()
   return ret;
 }
 
-Task<bee::Unit> SocketClient::closed()
+Task<> SocketClient::closed()
 {
-  if (_fd == nullptr) { return bee::unit; }
-  return _fd->closed();
+  if (_fd == nullptr) { co_return; }
+  co_return co_await _fd->closed();
 }
 
 void SocketClient::_call_data_callback(bee::OrError<bee::DataBuffer>&& buf)
@@ -306,9 +307,6 @@ void SocketClient::set_data_callback(data_callback&& data_callback)
   _data_callback = std::move(data_callback);
 }
 
-Deferred<bee::OrError<bee::Unit>> SocketClient::flushed()
-{
-  return _fd->flushed();
-}
+Task<bee::OrError<>> SocketClient::flushed() { return _fd->flushed(); }
 
 } // namespace async

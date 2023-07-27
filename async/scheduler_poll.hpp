@@ -1,16 +1,17 @@
 #pragma once
 
-#include "bee/file_descriptor.hpp"
-#include "bee/span.hpp"
-#include "bee/time.hpp"
-#include "scheduler.hpp"
-#include "scheduler_context.hpp"
-#include "socket.hpp"
-
 #include <functional>
 #include <map>
 #include <queue>
 #include <set>
+
+#include "scheduler.hpp"
+#include "scheduler_context.hpp"
+#include "socket.hpp"
+
+#include "bee/fd.hpp"
+#include "bee/span.hpp"
+#include "bee/time.hpp"
 
 namespace async {
 
@@ -25,20 +26,18 @@ struct SchedulerPoll : public Scheduler {
   SchedulerPoll(const SchedulerPoll&) = delete;
   SchedulerPoll(SchedulerPoll&&) = default;
 
-  virtual bee::OrError<bee::Unit> add_fd(
-    const bee::FileDescriptor::shared_ptr& fd,
-    std::function<void()>&& callback);
+  virtual bee::OrError<> add_fd(
+    const bee::FD::shared_ptr& fd, std::function<void()>&& callback);
 
-  virtual bee::OrError<bee::Unit> remove_fd(
-    const bee::FileDescriptor::shared_ptr& fd);
+  virtual bee::OrError<> remove_fd(const bee::FD::shared_ptr& fd);
 
-  virtual bee::OrError<bee::Unit> wait(bee::Span timeout);
+  virtual bee::OrError<> wait(bee::Span timeout);
 
   virtual void schedule(std::function<void()>&& f);
 
   virtual void close();
 
-  virtual bee::OrError<bee::Unit> wait_until(const std::function<bool()>& stop);
+  virtual bee::OrError<> wait_until(const std::function<bool()>& stop);
 
   virtual TimedTaskId after(
     const bee::Span& span, std::function<void()>&& callback);
@@ -50,13 +49,12 @@ struct SchedulerPoll : public Scheduler {
  private:
   SchedulerPoll();
 
-  bee::OrError<bee::Unit> _add_fd(
-    const bee::FileDescriptor& fd, std::function<void()> callback);
+  bee::OrError<> _add_fd(const bee::FD& fd, std::function<void()> callback);
 
   std::map<
-    std::weak_ptr<bee::FileDescriptor>,
+    std::weak_ptr<bee::FD>,
     std::function<void()>,
-    std::owner_less<std::weak_ptr<bee::FileDescriptor>>>
+    std::owner_less<std::weak_ptr<bee::FD>>>
     _callbacks;
 
   std::queue<std::function<void()>> _task_queue;

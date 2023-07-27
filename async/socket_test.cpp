@@ -1,47 +1,45 @@
-#include "socket.hpp"
-
-#include "bee/util.hpp"
-#include "deferred_awaitable.hpp"
-#include "testing.hpp"
-
 #include <thread>
 
+#include "deferred_awaitable.hpp"
+#include "socket.hpp"
+#include "testing.hpp"
+
+#include "bee/util.hpp"
+
 using namespace async;
-using bee::print_line;
+
 using std::nullopt;
 
 namespace async {
 namespace {
 
-CORO_TEST(basic)
+ASYNC_TEST(basic)
 {
-  co_bail(
+  must(
     server,
     SocketServer::listen(
-      nullopt,
-      [](bee::OrError<SocketClient::ptr>&& sock_or_error) -> Task<bee::Unit> {
+      nullopt, [](bee::OrError<SocketClient::ptr>&& sock_or_error) -> Task<> {
         must(sock, sock_or_error);
         sock->send("hello");
-        sock->flushed().iter(
-          [sock](const bee::OrError<bee::Unit>&) { sock->close(); });
-        return bee::unit;
+        co_await sock->flushed();
+        sock->close();
       }));
 
-  co_bail(port, server->port());
+  must(port, server->port());
 
-  co_bail(ip, SocketClient::resolve_host("localhost"));
-  co_bail(client, SocketClient::connect(ip, port));
+  must(ip, SocketClient::resolve_host("localhost"));
+  must(client, SocketClient::connect(ip, port));
 
-  auto done = Ivar<bee::Unit>::create();
+  auto done = Ivar<>::create();
 
   client->set_data_callback(
     [done](bee::OrError<bee::DataBuffer>&& buf_or_error) {
       must(buf, buf_or_error);
       if (buf.empty()) {
-        print_line("Got eof");
-        done->resolve(bee::unit);
+        P("Got eof");
+        done->fill();
       } else {
-        print_line("Got data: '$'", buf.to_string());
+        P("Got data: '$'", buf);
       }
     });
 
@@ -49,17 +47,14 @@ CORO_TEST(basic)
 
   server->close();
   client->close();
-
-  co_return bee::unit;
 }
 
-CORO_TEST(send_data_buffer)
+ASYNC_TEST(send_data_buffer)
 {
-  co_bail(
+  must(
     server,
     SocketServer::listen(
-      nullopt,
-      [](bee::OrError<SocketClient::ptr>&& sock_or_error) -> Task<bee::Unit> {
+      nullopt, [](bee::OrError<SocketClient::ptr>&& sock_or_error) -> Task<> {
         must(sock, sock_or_error);
         {
           bee::DataBuffer buffer;
@@ -68,26 +63,25 @@ CORO_TEST(send_data_buffer)
           buffer.write("end");
           must_unit(sock->send(std::move(buffer)));
         }
-        sock->flushed().iter(
-          [sock](const bee::OrError<bee::Unit>&) { sock->close(); });
-        return bee::unit;
+        co_await sock->flushed();
+        sock->close();
       }));
 
-  co_bail(port, server->port());
+  must(port, server->port());
 
-  co_bail(ip, SocketClient::resolve_host("localhost"));
-  co_bail(client, SocketClient::connect(ip, port));
+  must(ip, SocketClient::resolve_host("localhost"));
+  must(client, SocketClient::connect(ip, port));
 
-  auto done = Ivar<bee::Unit>::create();
+  auto done = Ivar<>::create();
 
   client->set_data_callback(
     [done](bee::OrError<bee::DataBuffer>&& buf_or_error) {
       must(buf, buf_or_error);
       if (buf.empty()) {
-        print_line("Got eof");
-        done->resolve(bee::unit);
+        P("Got eof");
+        done->fill();
       } else {
-        print_line("Got data: '$'", buf.to_string());
+        P("Got data: '$'", buf);
       }
     });
 
@@ -95,8 +89,6 @@ CORO_TEST(send_data_buffer)
 
   server->close();
   client->close();
-
-  co_return bee::unit;
 }
 
 } // namespace

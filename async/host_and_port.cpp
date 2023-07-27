@@ -22,15 +22,12 @@ bee::OrError<HostAndPort> HostAndPort::of_string(const string& str)
 {
   auto parts = bee::split(str, ":");
   if (parts.size() != 2) {
-    return bee::Error::format("Invalid host and port: $", str);
+    return bee::Error::fmt("Invalid host and port: $", str);
   }
   return HostAndPort(parts[0], std::stoi(parts[1]));
 }
 
-string HostAndPort::to_string() const
-{
-  return bee::format("$:$", _host, _port);
-}
+string HostAndPort::to_string() const { return F("$:$", _host, _port); }
 
 const char* HostAndPort::type_name() { return "async::HostAndPort"; }
 

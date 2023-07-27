@@ -1,12 +1,9 @@
 #include "out_thread.hpp"
-
-#include "bee/format_optional.hpp"
 #include "testing.hpp"
 
-using bee::print_line;
+#include "bee/format_optional.hpp"
 
 namespace async {
-
 namespace {
 
 void out_thread_runner(OutThread<int, int>::QueuePair& queue_pair)
@@ -14,22 +11,21 @@ void out_thread_runner(OutThread<int, int>::QueuePair& queue_pair)
   for (auto input : queue_pair.input_queue) { queue_pair.send(input * input); }
 }
 
-CORO_TEST(basic)
+ASYNC_TEST(basic)
 {
-  co_bail(out_thread, (OutThread<int, int>::create(out_thread_runner, 1)));
+  must(out_thread, (OutThread<int, int>::create(out_thread_runner, 1)));
 
   out_thread->send(5);
   out_thread->send(9);
 
-  auto print_results = [&]() -> Task<bee::Unit> {
-    print_line("printer started");
+  auto print_results = [&]() -> Task<> {
+    P("printer started");
     while (true) {
       auto value = co_await out_thread->receive();
       if (!value.has_value()) break;
-      print_line("result: $", value);
+      P("result: $", value);
     }
-    print_line("printer exited");
-    co_return bee::unit;
+    P("printer exited");
   };
 
   auto print_task = print_results();
@@ -37,31 +33,26 @@ CORO_TEST(basic)
   out_thread->close();
 
   co_await print_task;
-
-  co_return bee::unit;
 }
 
-CORO_TEST(dont_close)
+ASYNC_TEST(dont_close)
 {
-  co_bail(out_thread, (OutThread<int, int>::create(out_thread_runner, 1)));
-
-  co_return bee::unit;
+  must(ot, (OutThread<int, int>::create(out_thread_runner, 1)));
+  [[maybe_unused]] auto v = ot;
+  co_return;
 }
 
-CORO_TEST(out_thread_exists)
+ASYNC_TEST(out_thread_exists)
 {
-  co_bail(
+  must(
     out_thread, (OutThread<int, int>::create([](const auto&) { return; }, 1)));
 
   while (true) {
     auto value = co_await out_thread->receive();
     if (!value.has_value()) break;
-    print_line("got unexpecte value");
+    P("got unexpecte value");
   }
-
-  co_return bee::unit;
 }
 
 } // namespace
-
 } // namespace async

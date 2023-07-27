@@ -1,7 +1,8 @@
 #pragma once
 
-#include "bee/error.hpp"
 #include "scheduler_context.hpp"
+
+#include "bee/error.hpp"
 
 namespace async {
 

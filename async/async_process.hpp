@@ -1,12 +1,13 @@
 #pragma once
 
-#include "bee/error.hpp"
-#include "bee/sub_process.hpp"
-#include "process_manager.hpp"
-
 #include <functional>
 #include <map>
 #include <memory>
+
+#include "process_manager.hpp"
+
+#include "bee/error.hpp"
+#include "bee/sub_process.hpp"
 
 namespace async {
 

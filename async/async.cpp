@@ -4,20 +4,19 @@ using bee::Span;
 
 namespace async {
 
-Deferred<bee::Unit> after(const Span& span)
+Deferred<> after(const Span& span)
 {
-  auto ivar = Ivar<bee::Unit>::create();
-  after(span, [ivar]() { ivar->resolve(bee::unit); });
+  auto ivar = Ivar<>::create();
+  after(span, [ivar]() { ivar->fill(); });
   return ivar_value(ivar);
 }
 
-Deferred<bee::OrError<bee::Unit>> repeat(
-  int times, const std::function<Deferred<bee::OrError<bee::Unit>>()>& f)
+Deferred<bee::OrError<>> repeat(
+  int times, const std::function<Deferred<bee::OrError<>>()>& f)
 {
-  if (times <= 0) { return bee::unit; }
+  if (times <= 0) { return bee::ok(); }
   return f().bind(
-    [f, times](const bee::OrError<bee::Unit>& result)
-      -> Deferred<bee::OrError<bee::Unit>> {
+    [f, times](const bee::OrError<>& result) -> Deferred<bee::OrError<>> {
       if (result.is_error()) {
         return result;
       } else {

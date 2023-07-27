@@ -1,11 +1,9 @@
 #pragma once
 
+#include <mutex>
+
 #include "async.hpp"
 #include "pipe.hpp"
-
-#include "bee/file_descriptor.hpp"
-
-#include <mutex>
 
 namespace async {
 

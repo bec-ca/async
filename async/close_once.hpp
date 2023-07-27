@@ -11,10 +11,10 @@ struct CloseOnce {
 
   virtual ~CloseOnce();
 
-  virtual Task<bee::Unit> close();
+  virtual Task<> close();
 
  protected:
-  virtual Task<bee::Unit> _close() = 0;
+  virtual Task<> _close() = 0;
 
  private:
   Once<bee::Unit> _once;

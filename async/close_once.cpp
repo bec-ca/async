@@ -2,10 +2,15 @@
 
 namespace async {
 
-CloseOnce::CloseOnce() : _once([this]() { return this->_close(); }) {}
+CloseOnce::CloseOnce()
+    : _once([this]() -> Task<bee::Unit> {
+        co_await this->_close();
+        co_return bee::unit;
+      })
+{}
 
 CloseOnce::~CloseOnce() {}
 
-Task<bee::Unit> CloseOnce::close() { co_return co_await _once(); }
+Task<> CloseOnce::close() { co_await _once(); }
 
 } // namespace async

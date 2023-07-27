@@ -1,15 +1,17 @@
 #include "scheduler_poll.hpp"
 
-#include "async.hpp"
-#include "bee/file_descriptor.hpp"
-#include "scheduler.hpp"
-
 #include <cstring>
 #include <map>
+
 #include <poll.h>
 #include <sys/errno.h>
 
-using bee::FileDescriptor;
+#include "async.hpp"
+#include "scheduler.hpp"
+
+#include "bee/fd.hpp"
+
+using bee::FD;
 using bee::Span;
 using bee::Time;
 using std::function;
@@ -33,24 +35,23 @@ bee::OrError<SchedulerContext> SchedulerPoll::create_context()
   return SchedulerContext::create(std::move(poll));
 }
 
-bee::OrError<bee::Unit> SchedulerPoll::add_fd(
-  const FileDescriptor::shared_ptr& fd, function<void()>&& callback)
+bee::OrError<> SchedulerPoll::add_fd(
+  const FD::shared_ptr& fd, function<void()>&& callback)
 {
   _callbacks.emplace(fd, std::move(callback));
 
-  return bee::unit;
+  return bee::ok();
 }
 
-bee::OrError<bee::Unit> SchedulerPoll::remove_fd(
-  const FileDescriptor::shared_ptr& fd)
+bee::OrError<> SchedulerPoll::remove_fd(const FD::shared_ptr& fd)
 {
   _callbacks.erase(fd);
-  return bee::unit;
+  return bee::ok();
 }
 
 const Span max_timeout = Span::of_seconds(60);
 
-bee::OrError<bee::Unit> SchedulerPoll::wait(Span timeout)
+bee::OrError<> SchedulerPoll::wait(Span timeout)
 {
   _run_tasks_until_empty();
 
@@ -76,7 +77,7 @@ bee::OrError<bee::Unit> SchedulerPoll::wait(Span timeout)
   }
 
   vector<pollfd> poll_fds;
-  vector<weak_ptr<FileDescriptor>> fds;
+  vector<weak_ptr<FD>> fds;
   for (const auto& fdp : _callbacks) {
     auto fd = fdp.first.lock();
     short events = POLLIN;
@@ -92,7 +93,7 @@ bee::OrError<bee::Unit> SchedulerPoll::wait(Span timeout)
 
   if (ret == -1) {
     if (errno != EINTR) {
-      return bee::Error::format("Failed to wait to epoll: $", strerror(errno));
+      return bee::Error::fmt("Failed to wait to epoll: $", strerror(errno));
     }
   } else {
     for (int i = 0; i < int(poll_fds.size()); i++) {
@@ -109,10 +110,10 @@ bee::OrError<bee::Unit> SchedulerPoll::wait(Span timeout)
 
   _run_tasks_until_empty();
 
-  return bee::unit;
+  return bee::ok();
 }
 
-bee::OrError<bee::Unit> SchedulerPoll::wait_until(const function<bool()>& stop)
+bee::OrError<> SchedulerPoll::wait_until(const function<bool()>& stop)
 {
   auto timeout = Span::of_seconds(1);
   while (true) {
@@ -121,7 +122,7 @@ bee::OrError<bee::Unit> SchedulerPoll::wait_until(const function<bool()>& stop)
     bail_unit(wait(timeout));
   }
 
-  return bee::unit;
+  return bee::ok();
 }
 
 void SchedulerPoll::close()

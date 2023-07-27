@@ -1,13 +1,13 @@
 #pragma once
 
+#include <concepts>
+#include <thread>
+
 #include "once.hpp"
 #include "pipe.hpp"
 #include "queue_bridge.hpp"
 
 #include "bee/queue.hpp"
-
-#include <concepts>
-#include <thread>
 
 namespace async {
 

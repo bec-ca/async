@@ -8,8 +8,9 @@ namespace async {
 
 template <std::copy_constructible T> struct Once {
  public:
-  using Fn = std::function<Task<bee::Unit>()>;
-  Once(Fn&& fn) : _fn(fn) {}
+  using Fn = std::function<Task<T>()>;
+
+  template <class F> Once(F&& fn) : _fn(std::forward<F>(fn)) {}
 
   Task<T> operator()()
   {
@@ -24,11 +25,11 @@ template <std::copy_constructible T> struct Once {
   using Iv = IvarMulti<T>;
   using Ivp = typename Iv::ptr;
 
-  static Task<T> _call(Fn fn, Ivp ivar)
+  static Task<> _call(Fn fn, Ivp ivar)
   {
     auto result = co_await fn();
-    ivar->resolve(result);
-    co_return bee::unit;
+    ivar->fill(result);
+    co_return;
   }
 
   bool _called = false;

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "bee/error.hpp"
-#include "bee/file_descriptor.hpp"
-#include "bee/span.hpp"
-
 #include <functional>
+
+#include "bee/error.hpp"
+#include "bee/fd.hpp"
+#include "bee/span.hpp"
 
 namespace async {
 
@@ -33,19 +33,16 @@ struct Scheduler {
 
   virtual ~Scheduler();
 
-  virtual bee::OrError<bee::Unit> add_fd(
-    const bee::FileDescriptor::shared_ptr& fd,
-    std::function<void()>&& callback) = 0;
+  virtual bee::OrError<> add_fd(
+    const bee::FD::shared_ptr& fd, std::function<void()>&& callback) = 0;
 
-  virtual bee::OrError<bee::Unit> remove_fd(
-    const bee::FileDescriptor::shared_ptr& fd) = 0;
+  virtual bee::OrError<> remove_fd(const bee::FD::shared_ptr& fd) = 0;
 
   virtual void schedule(std::function<void()>&& f) = 0;
 
   virtual void close() = 0;
 
-  virtual bee::OrError<bee::Unit> wait_until(
-    const std::function<bool()>& stop) = 0;
+  virtual bee::OrError<> wait_until(const std::function<bool()>& stop) = 0;
 
   virtual TimedTaskId after(
     const bee::Span& span, std::function<void()>&& callback) = 0;

@@ -38,9 +38,9 @@ template <class F> TimedTaskId after(const bee::Span& span, F&& callback)
 
 void cancel(TimedTaskId task_id);
 
-bee::OrError<bee::Unit> add_fd(
-  const bee::FileDescriptor::shared_ptr& fd, std::function<void()>&& callback);
+bee::OrError<> add_fd(
+  const bee::FD::shared_ptr& fd, std::function<void()>&& callback);
 
-bee::OrError<bee::Unit> remove_fd(const bee::FileDescriptor::shared_ptr& fd);
+bee::OrError<> remove_fd(const bee::FD::shared_ptr& fd);
 
 } // namespace async

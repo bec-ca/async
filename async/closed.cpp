@@ -9,28 +9,23 @@ namespace async {
 
 Closed::Closed() noexcept
     : _close_requested(false),
-      _on_close_ivar(IvarMulti<bee::OrError<bee::Unit>>::create())
+      _on_close_ivar(IvarMulti<bee::OrError<>>::create())
 {}
 
 Closed::~Closed() {}
 
-Task<bee::OrError<bee::Unit>> Closed::closed()
+Task<bee::OrError<>> Closed::closed()
 {
   co_return co_await _on_close_ivar->deferred_value();
 }
 
-Task<bee::Unit> Closed::close()
+Task<> Closed::close()
 {
-  if (_close_requested) {
-    co_await closed();
-    co_return bee::unit;
-  }
+  if (_close_requested) { co_await closed(); }
   _close_requested = true;
 
   co_await close_impl();
-  _on_close_ivar->resolve(bee::ok());
-
-  co_return bee::unit;
+  _on_close_ivar->fill(bee::ok());
 }
 
 } // namespace async

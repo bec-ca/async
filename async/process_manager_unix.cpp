@@ -1,14 +1,14 @@
 #include "process_manager_unix.hpp"
 
-#include "bee/sub_process.hpp"
+#include <csignal>
+#include <cstring>
+#include <map>
+
 #include "process_manager.hpp"
 #include "scheduler_context.hpp"
 
 #include "bee/signal.hpp"
-
-#include <csignal>
-#include <cstring>
-#include <map>
+#include "bee/sub_process.hpp"
 
 using bee::SubProcess;
 using std::make_shared;
@@ -35,9 +35,9 @@ struct ProcessManagerUnixImpl : public ProcessManager {
   virtual bee::OrError<SubProcess::ptr> spawn_process(
     const SubProcess::CreateProcessArgs& args, on_exit_callback&& on_exit);
 
-  bee::OrError<bee::Unit> check_children();
+  bee::OrError<> check_children();
 
-  ProcessManagerUnixImpl(bee::FileDescriptor&& fd);
+  ProcessManagerUnixImpl(bee::FD&& fd);
 
   static bee::OrError<ptr> create();
 
@@ -46,10 +46,10 @@ struct ProcessManagerUnixImpl : public ProcessManager {
  private:
   map<SubProcess::ptr, std::function<void(int exit_status)>> _callbacks;
 
-  bee::FileDescriptor::shared_ptr _fd;
+  bee::FD::shared_ptr _fd;
 };
 
-ProcessManagerUnixImpl::ProcessManagerUnixImpl(bee::FileDescriptor&& fd)
+ProcessManagerUnixImpl::ProcessManagerUnixImpl(bee::FD&& fd)
     : _fd(std::move(fd).to_shared())
 {}
 
@@ -82,7 +82,7 @@ bee::OrError<SubProcess::ptr> ProcessManagerUnixImpl::spawn_process(
   return proc;
 }
 
-bee::OrError<bee::Unit> ProcessManagerUnixImpl::check_children()
+bee::OrError<> ProcessManagerUnixImpl::check_children()
 {
   while (true) {
     char buffer[1024];
@@ -96,7 +96,7 @@ bee::OrError<bee::Unit> ProcessManagerUnixImpl::check_children()
 
     auto it = _callbacks.find(status->proc);
     if (it == _callbacks.end()) {
-      return bee::Error::format(
+      return bee::Error::fmt(
         "Got status changed on unknown pid: $", status->proc->pid().to_int());
     }
     it->second(status->exit_status);

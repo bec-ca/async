@@ -1,9 +1,10 @@
 #pragma once
 
-#include "bee/error.hpp"
-#include "yasf/of_stringable_mixin.hpp"
-
 #include <string>
+
+#include "bee/error.hpp"
+#include "command/flag_spec.hpp"
+#include "yasf/of_stringable_mixin.hpp"
 
 namespace async {
 
@@ -24,5 +25,7 @@ struct HostAndPort : public yasf::OfStringableMixin<HostAndPort> {
   std::string _host;
   int _port;
 };
+
+constexpr auto host_and_port_flag = command::create_flag_spec<HostAndPort>();
 
 } // namespace async

@@ -1,7 +1,7 @@
-#include "bee/testing.hpp"
-
 #include "scheduler_poll.hpp"
 #include "scheduler_test_common.hpp"
+
+#include "bee/testing.hpp"
 
 namespace async {
 namespace {

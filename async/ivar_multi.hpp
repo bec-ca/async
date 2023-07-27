@@ -1,14 +1,23 @@
 #pragma once
 
+#include <type_traits>
+
 #include "async.hpp"
 
 #include "bee/copy.hpp"
+#include "bee/unit.hpp"
 
 namespace async {
 
-template <class T> struct IvarMulti {
+template <deferable_value T = void> struct IvarMulti {
  public:
   using ptr = std::shared_ptr<IvarMulti>;
+
+  using value_type = T;
+  using lvalue_type = std::add_lvalue_reference_t<value_type>;
+
+  using const_value_type = const value_type;
+  using const_lvalue_type = std::add_lvalue_reference_t<const_value_type>;
 
   IvarMulti() {}
 
@@ -17,42 +26,48 @@ template <class T> struct IvarMulti {
 
   static ptr create() { return ptr(new IvarMulti()); }
 
-  bool has_value() const { return _value.has_value(); }
-
-  const std::optional<T>& value_opt() const { return _value; }
-  const T& value() const { return *_value; }
-
-  Deferred<T> deferred_value()
+  const_lvalue_type value() const
   {
-    if (_value.has_value()) { return *_value; }
-    auto ivar = Ivar<T>::create();
+    if constexpr (!std::is_void_v<T>) { return *_value; }
+  }
+
+  Deferred<value_type> deferred_value()
+  {
+    if (_value.has_value()) {
+      if constexpr (std::is_void_v<T>) {
+        return {};
+      } else {
+        return *_value;
+      }
+    }
+    auto ivar = Ivar<value_type>::create();
     _ivars.push_back(ivar);
     return ivar_value(ivar);
   }
 
-  void resolve(T&& value)
+  template <class... Args> void fill(Args&&... args)
   {
-    _value.emplace(std::move(value));
+    _value.emplace(std::forward<Args>(args)...);
     _fan_out();
   }
 
-  void resolve(const T& value)
-  {
-    _value.emplace(value);
-    _fan_out();
-  }
-
-  bool is_resolved() const { return _value.has_value(); }
+  bool is_determined() const { return _value.has_value(); }
 
  private:
   void _fan_out()
   {
-    for (auto& ivar : _ivars) { ivar->resolve(bee::copy(*_value)); }
+    for (auto& ivar : _ivars) {
+      if constexpr (std::is_void_v<T>) {
+        ivar->fill();
+      } else {
+        ivar->fill(bee::copy(*_value));
+      }
+    }
     _ivars.clear();
   }
 
-  std::vector<typename Ivar<T>::ptr> _ivars;
-  std::optional<T> _value;
+  std::vector<typename Ivar<value_type>::ptr> _ivars;
+  std::optional<bee::unit_if_void_t<T>> _value;
 };
 
 } // namespace async

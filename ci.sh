@@ -1,10 +1,34 @@
 #!/bin/bash -eu
 
-./download-pkg.sh bee https://github.com/bec-ca/bee/archive/refs/tags/v1.1.0.tar.gz
-./download-pkg.sh command https://github.com/bec-ca/command/archive/refs/tags/v1.0.1.tar.gz
-./download-pkg.sh yasf https://github.com/bec-ca/yasf/archive/refs/tags/v1.0.0.tar.gz
+if command -v clang-format-16; then
+  export CLANG_FORMAT=clang-format-16
+fi
 
-for file in async/*.cpp; do
-  echo "Compiling $file..."
-  clang++ -c $(cat compile_flags.txt) $file
-done
+export MELLOW=build/mellow.bootstrap
+
+function build_bootstrap() {
+  echo "Downloading and compiling mellow..."
+  bootstrap_dir=.bootstrap
+  mellow_dir=$bootstrap_dir/mellow-with-deps
+
+  rm -rf $bootstrap_dir
+  mkdir $bootstrap_dir
+  pushd $bootstrap_dir
+  curl -s -L "https://github.com/bec-ca/mellow/releases/download/v0.0.3/mellow-with-deps-v0.0.3.tar.gz" -o mellow-with-deps.tar.gz
+  tar -xf mellow-with-deps.tar.gz
+  popd
+
+  pushd $mellow_dir
+  make -j $(nproc) -f Makefile.bootstrap
+  popd
+
+  mkdir -p build
+  cp $mellow_dir/build/bootstrap/mellow/mellow $MELLOW
+}
+
+if ! [ -f $MELLOW ]; then
+  build_bootstrap
+fi
+
+make fetch
+PROFILE=release make

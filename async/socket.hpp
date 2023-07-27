@@ -1,13 +1,13 @@
 #pragma once
 
+#include <memory>
+
 #include "async_fd.hpp"
 #include "task.hpp"
 
 #include "bee/data_buffer.hpp"
 #include "bee/error.hpp"
-#include "bee/file_descriptor.hpp"
-
-#include <memory>
+#include "bee/fd.hpp"
 
 namespace async {
 
@@ -35,8 +35,8 @@ struct SocketClient : public std::enable_shared_from_this<SocketClient> {
 
   static bee::OrError<ptr> connect(const IP& ip, int port);
 
-  bee::OrError<bee::Unit> send(std::string&& data);
-  bee::OrError<bee::Unit> send(bee::DataBuffer&& data);
+  bee::OrError<> send(std::string&& data);
+  bee::OrError<> send(bee::DataBuffer&& data);
 
   static bee::OrError<IP> resolve_host(const std::string& hostname);
 
@@ -46,13 +46,13 @@ struct SocketClient : public std::enable_shared_from_this<SocketClient> {
 
   bool is_closed() const;
 
-  Task<bee::Unit> closed();
+  Task<> closed();
 
   static ptr of_fd(AsyncFD::ptr&& fd);
 
   void set_data_callback(data_callback&& data_callback);
 
-  Deferred<bee::OrError<bee::Unit>> flushed();
+  Task<bee::OrError<>> flushed();
 
  private:
   explicit SocketClient(AsyncFD::ptr&& fd);
@@ -75,7 +75,7 @@ struct SocketServer {
   using ptr = std::shared_ptr<SocketServer>;
 
   using connection_callback =
-    std::function<Task<bee::Unit>(bee::OrError<SocketClient::ptr>&&)>;
+    std::function<Task<>(bee::OrError<SocketClient::ptr>&&)>;
 
   ~SocketServer();
 
